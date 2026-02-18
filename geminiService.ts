@@ -2,9 +2,15 @@
 import { GoogleGenAI } from "@google/genai";
 import { Loan, Bank } from './types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 export async function getAppraisalInsights(loans: Loan[], banks: Bank[]) {
+  // If no API key is available, return default message
+  if (!ai) {
+    return "Keep up the consistent appraisal work to maintain a balanced workload across your partner banks.";
+  }
+
   const summary = loans.reduce((acc: any, loan) => {
     const b = banks.find(bank => bank.id === loan.bankId)?.name || 'Other';
     acc[b] = (acc[b] || 0) + 1;
