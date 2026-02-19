@@ -22,7 +22,7 @@ import {
 } from 'recharts';
 import { getAppraisalInsights } from '../geminiService';
 
-const APPRAISAL_FEE = 350;
+const APPRAISAL_FEE = 300;
 
 const Dashboard: React.FC = () => {
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -145,7 +145,7 @@ const Dashboard: React.FC = () => {
           <div className="relative z-10">
             <p className="text-slate-500 font-medium text-sm mb-1 uppercase tracking-wider">Today's Salary</p>
             <h2 className="text-3xl font-bold text-slate-900">₹{stats.todayEarnings.toLocaleString()}</h2>
-            <p className="text-xs text-slate-400 mt-3 font-semibold uppercase tracking-tight">Rate: ₹350 / loan</p>
+            <p className="text-xs text-slate-400 mt-3 font-semibold uppercase tracking-tight">Rate: ₹300 / loan</p>
           </div>
           <IndianRupee className="absolute -bottom-4 -right-4 w-24 h-24 text-slate-50 opacity-10 group-hover:scale-110 transition-transform duration-500" />
         </div>
