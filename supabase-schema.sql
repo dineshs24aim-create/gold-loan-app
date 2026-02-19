@@ -7,7 +7,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Banks Table
 CREATE TABLE IF NOT EXISTS banks (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL UNIQUE,
+  appraiser_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -29,68 +30,58 @@ CREATE INDEX IF NOT EXISTS idx_loans_bank_id ON loans(bank_id);
 CREATE INDEX IF NOT EXISTS idx_loans_date ON loans(date);
 CREATE INDEX IF NOT EXISTS idx_loans_appraiser_id ON loans(appraiser_id);
 CREATE INDEX IF NOT EXISTS idx_loans_created_at ON loans(created_at);
-
--- Insert initial banks
-INSERT INTO banks (name) VALUES
-  ('AU Bank Lalgudi'),
-  ('AU Bank Mannachanallur'),
-  ('RBL Bank Lalgudi'),
-  ('RBL Bank Mannachanallur')
-ON CONFLICT (name) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_banks_appraiser_id ON banks(appraiser_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_banks_appraiser_name_unique ON banks(appraiser_id, name);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE banks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for banks table
--- Allow authenticated users to read all banks
-CREATE POLICY "Allow authenticated users to read banks"
+-- Users can access only their own banks
+CREATE POLICY "Users can read their own banks"
   ON banks FOR SELECT
   TO authenticated
-  USING (true);
+  USING (appraiser_id = auth.uid());
 
--- Allow authenticated users to insert banks
-CREATE POLICY "Allow authenticated users to insert banks"
+CREATE POLICY "Users can insert their own banks"
   ON banks FOR INSERT
   TO authenticated
-  WITH CHECK (true);
+  WITH CHECK (appraiser_id = auth.uid());
 
--- Allow authenticated users to update banks
-CREATE POLICY "Allow authenticated users to update banks"
+CREATE POLICY "Users can update their own banks"
   ON banks FOR UPDATE
   TO authenticated
-  USING (true);
+  USING (appraiser_id = auth.uid())
+  WITH CHECK (appraiser_id = auth.uid());
 
--- Allow authenticated users to delete banks
-CREATE POLICY "Allow authenticated users to delete banks"
+CREATE POLICY "Users can delete their own banks"
   ON banks FOR DELETE
   TO authenticated
-  USING (true);
+  USING (appraiser_id = auth.uid());
 
 -- RLS Policies for loans table
--- Allow authenticated users to read all loans
-CREATE POLICY "Allow authenticated users to read loans"
+-- Users can access only their own loans
+CREATE POLICY "Users can read their own loans"
   ON loans FOR SELECT
   TO authenticated
-  USING (true);
+  USING (appraiser_id = auth.uid());
 
--- Allow authenticated users to insert loans
-CREATE POLICY "Allow authenticated users to insert loans"
+CREATE POLICY "Users can insert their own loans"
   ON loans FOR INSERT
   TO authenticated
-  WITH CHECK (true);
+  WITH CHECK (appraiser_id = auth.uid());
 
--- Allow authenticated users to update their own loans
-CREATE POLICY "Allow users to update their own loans"
+CREATE POLICY "Users can update their own loans"
   ON loans FOR UPDATE
   TO authenticated
-  USING (true);
+  USING (appraiser_id = auth.uid())
+  WITH CHECK (appraiser_id = auth.uid());
 
--- Allow authenticated users to delete their own loans
-CREATE POLICY "Allow users to delete their own loans"
+CREATE POLICY "Users can delete their own loans"
   ON loans FOR DELETE
   TO authenticated
-  USING (true);
+  USING (appraiser_id = auth.uid());
 
 -- Create a view for loans with bank names (for easier querying)
 CREATE OR REPLACE VIEW loans_with_bank AS
@@ -106,7 +97,7 @@ SELECT
   l.created_at,
   l.updated_at
 FROM loans l
-INNER JOIN banks b ON l.bank_id = b.id
+INNER JOIN banks b ON l.bank_id = b.id AND l.appraiser_id = b.appraiser_id
 ORDER BY l.date DESC, l.created_at DESC;
 
 -- Grant access to the view
@@ -126,6 +117,29 @@ CREATE TRIGGER update_loans_updated_at
   BEFORE UPDATE ON loans
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
+-- Seed default banks when a new user signs up
+CREATE OR REPLACE FUNCTION seed_default_banks_for_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO banks (appraiser_id, name)
+  VALUES
+    (NEW.id, 'AU Bank Lalgudi'),
+    (NEW.id, 'AU Bank Mannachanallur'),
+    (NEW.id, 'RBL Bank Lalgudi'),
+    (NEW.id, 'RBL Bank Mannachanallur')
+  ON CONFLICT (appraiser_id, name) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS seed_banks_on_auth_user_created ON auth.users;
+
+CREATE TRIGGER seed_banks_on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION seed_default_banks_for_new_user();
 
 -- SUCCESS! Your database is now set up.
 -- Next steps:
